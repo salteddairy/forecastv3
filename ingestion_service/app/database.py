@@ -104,14 +104,17 @@ def insert_records(data_type: str, records: List[Dict[str, Any]]) -> int:
 
             for record in records:
                 # Build INSERT ... ON CONFLICT ... DO UPDATE query
-                placeholders = {f"arg_{i}": v for i, v in enumerate(record.values())}
+                # Use named parameters for each column
+                param_dict = {}
+                for i, (col, val) in enumerate(record.items()):
+                    param_dict[col] = val
 
                 column_names = ", ".join(columns)
-                value_placeholders = ", ".join([f":arg_{i}" for i in range(len(columns))])
+                value_placeholders = ", ".join([f":{col}" for col in columns])
                 update_placeholders = ", ".join([
                     f"{col} = EXCLUDED.{col}"
                     for col in columns
-                    if col != conflict_key if isinstance(conflict_key, str) else col not in conflict_key
+                    if col not in ([conflict_key] if isinstance(conflict_key, str) else conflict_key)
                 ])
 
                 # Handle composite conflict keys
@@ -127,7 +130,7 @@ def insert_records(data_type: str, records: List[Dict[str, Any]]) -> int:
                     DO UPDATE SET {update_placeholders}
                 """)
 
-                conn.execute(query, **placeholders)
+                conn.execute(query, param_dict)
                 inserted += 1
 
             # Commit transaction

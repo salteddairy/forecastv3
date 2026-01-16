@@ -67,7 +67,12 @@ class ItemRecord(BaseModel):
     item_description: str = Field(..., max_length=500)
     item_group: Optional[str] = Field(None, max_length=100)
     region: Optional[str] = Field(None, max_length=100)
-    uom: Optional[str] = Field("EA", max_length=10)
+    base_uom: Optional[str] = Field("EA", max_length=10)
+    purch_uom: Optional[str] = Field("EA", max_length=10)
+    qty_per_purch_uom: Optional[float] = Field(1)
+    sales_uom: Optional[str] = Field("EA", max_length=10)
+    qty_per_sales_uom: Optional[float] = Field(1)
+    preferred_vendor_code: Optional[str] = Field(None, max_length=50)
     is_active: bool = True
 
 

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Debug materialized view."""
+import os
 import psycopg2
 
-DATABASE_URL = "postgresql://postgres:jNlZpTSycHzhYZrJuXRBBtGdWpNTAmZZ@interchange.proxy.rlwy.net:46687/railway"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set")
 
 
 def debug_mv():

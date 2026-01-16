@@ -13,7 +13,9 @@ import psycopg2
 from psycopg2.extras import execute_batch
 
 # Database connection
-DATABASE_URL = "postgresql://postgres:jNlZpTSycHzhYZrJuXRBBtGdWpNTAmZZ@interchange.proxy.rlwy.net:46687/railway"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set")
 
 # Data directory
 DATA_RAW_DIR = Path(__file__).parent.parent / "data" / "raw"

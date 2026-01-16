@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Run database migration from SQL file."""
+import os
 import sys
 from pathlib import Path
 
 import psycopg2
 
 # Database connection
-DATABASE_URL = "postgresql://postgres:jNlZpTSycHzhYZrJuXRBBtGdWpNTAmZZ@interchange.proxy.rlwy.net:46687/railway"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set")
 
 # Migration file path
 MIGRATION_FILE = Path(__file__).parent.parent / "database" / "migrations" / "001_initial_schema.sql"

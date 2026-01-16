@@ -1,96 +1,119 @@
 #!/usr/bin/env python3
-"""Check and fix table schema."""
-import psycopg2
+"""
+Check what database objects exist in Railway PostgreSQL.
+"""
 
-DATABASE_URL = "postgresql://postgres:jNlZpTSycHzhYZrJuXRBBtGdWpNTAmZZ@interchange.proxy.rlwy.net:46687/railway"
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from sqlalchemy import create_engine, text
 
 
-def check_and_fix_schema():
-    """Check table columns and fix schema."""
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.autocommit = True
-    cursor = conn.cursor()
+def check_database(database_url: str):
+    """Check what objects exist in the database."""
+    sys.stdout.reconfigure(encoding='utf-8')
 
-    print("Checking pricing table columns...")
-    cursor.execute("""
-        SELECT column_name, data_type
-        FROM information_schema.columns
-        WHERE table_name = 'pricing'
-        ORDER BY ordinal_position;
-    """)
-    columns = cursor.fetchall()
-    for col in columns:
-        print(f"  - {col[0]}: {col[1]}")
+    print("Connecting to Railway PostgreSQL...")
+    engine = create_engine(database_url)
 
-    # Check if region_key column exists
-    has_region_key = any(col[0] == 'region_key' for col in columns)
+    with engine.connect() as conn:
+        # Check tables
+        result = conn.execute(text("""
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY tablename;
+        """))
+        tables = [row[0] for row in result]
 
-    if not has_region_key:
-        print("\nAdding region_key column to pricing table...")
-        cursor.execute("""
-            ALTER TABLE pricing
-            ADD COLUMN region_key VARCHAR(50)
-            GENERATED ALWAYS AS (COALESCE(region, '')) STORED;
-        """)
-        print("  [OK] Added region_key column")
-    else:
-        print("\nregion_key column already exists")
+        print(f"\n=== TABLES ({len(tables)}) ===")
+        for table in tables:
+            # Get row count
+            count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
+            count = count_result.scalar()
+            print(f"  {table}: {count:,} rows")
 
-    # Same for costs table
-    print("\nChecking costs table columns...")
-    cursor.execute("""
-        SELECT column_name, data_type
-        FROM information_schema.columns
-        WHERE table_name = 'costs'
-        ORDER BY ordinal_position;
-    """)
-    columns = cursor.fetchall()
-    for col in columns:
-        print(f"  - {col[0]}: {col[1]}")
+        # Check materialized views
+        result = conn.execute(text("""
+            SELECT matviewname
+            FROM pg_matviews
+            WHERE schemaname = 'public'
+            ORDER BY matviewname;
+        """))
+        matviews = [row[0] for row in result]
 
-    has_vendor_code_key = any(col[0] == 'vendor_code_key' for col in columns)
+        if matviews:
+            print(f"\n=== MATERIALIZED VIEWS ({len(matviews)}) ===")
+            for mv in matviews:
+                print(f"  {mv}")
 
-    if not has_vendor_code_key:
-        print("\nAdding vendor_code_key column to costs table...")
-        cursor.execute("""
-            ALTER TABLE costs
-            ADD COLUMN vendor_code_key VARCHAR(50)
-            GENERATED ALWAYS AS (COALESCE(vendor_code, '')) STORED;
-        """)
-        print("  [OK] Added vendor_code_key column")
-    else:
-        print("\nvendor_code_key column already exists")
+        # Check regular views
+        result = conn.execute(text("""
+            SELECT viewname
+            FROM pg_views
+            WHERE schemaname = 'public'
+            ORDER BY viewname;
+        """))
+        views = [row[0] for row in result]
 
-    # Recreate the materialized view
-    print("\nRecreating mv_latest_pricing...")
-    cursor.execute("DROP MATERIALIZED VIEW IF EXISTS mv_latest_pricing CASCADE;")
-    cursor.execute("""
-        CREATE MATERIALIZED VIEW mv_latest_pricing AS
-        SELECT DISTINCT ON (item_code, price_level, region_key)
-            item_code,
-            price_level,
-            region,
-            unit_price,
-            currency,
-            effective_date,
-            price_source
-        FROM pricing
-        WHERE is_active = TRUE
-        ORDER BY item_code, price_level, region_key, effective_date DESC;
-    """)
-    print("  [OK] Created mv_latest_pricing")
+        if views:
+            print(f"\n=== VIEWS ({len(views)}) ===")
+            for view in views:
+                print(f"  {view}")
 
-    # Create index
-    cursor.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_latest_pricing_key
-        ON mv_latest_pricing(item_code, price_level, region_key);
-    """)
-    print("  [OK] Created index")
+        # Expected schema
+        expected_tables = [
+            'warehouses', 'vendors', 'items', 'inventory_current',
+            'sales_orders', 'purchase_orders', 'costs', 'pricing',
+            'forecasts', 'forecast_accuracy', 'margin_alerts'
+        ]
 
-    cursor.close()
-    conn.close()
-    print("\nSchema fix complete!")
+        expected_matviews = [
+            'mv_latest_costs', 'mv_latest_pricing', 'mv_vendor_lead_times'
+        ]
+
+        expected_views = [
+            'v_inventory_status_with_forecast', 'v_item_margins'
+        ]
+
+        # Check completeness
+        print(f"\n=== SCHEMA COMPLETENESS ===")
+        print(f"Tables: {len(tables)}/{len(expected_tables)} expected")
+        missing_tables = set(expected_tables) - set(tables)
+        if missing_tables:
+            print(f"  Missing: {missing_tables}")
+
+        print(f"Materialized Views: {len(matviews)}/{len(expected_matviews)} expected")
+        missing_matviews = set(expected_matviews) - set(matviews)
+        if missing_matviews:
+            print(f"  Missing: {missing_matviews}")
+
+        print(f"Views: {len(views)}/{len(expected_views)} expected")
+        missing_views = set(expected_views) - set(views)
+        if missing_views:
+            print(f"  Missing: {missing_views}")
+
+        if len(tables) == len(expected_tables) and \
+           len(matviews) == len(expected_matviews) and \
+           len(views) == len(expected_views):
+            print("\nSchema is complete!")
+        else:
+            print("\nSchema is incomplete. Some objects need to be created.")
 
 
 if __name__ == "__main__":
-    check_and_fix_schema()
+    import os
+
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url and len(sys.argv) > 1:
+        database_url = sys.argv[1]
+
+    if not database_url:
+        print("DATABASE_URL not set!")
+        print("Usage: python scripts/check_schema.py <DATABASE_URL>")
+        sys.exit(1)
+
+    check_database(database_url)

@@ -1,0 +1,20 @@
+# Railway Deployment Configuration
+# FastAPI Ingestion Service
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[[services]]
+name = "ingestion-service"
+source = "."
+annotation = "SAP B1 Data Ingestion API"
+
+[services.env]
+PORT = "8000"

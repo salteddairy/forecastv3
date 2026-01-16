@@ -1,0 +1,16 @@
+{
+  "data_type": "inventory_current",
+  "source": "SAP_B1",
+  "timestamp": "2026-01-16T14:59:54.808817",
+  "records": [
+    {
+      "item_code": "TEST001",
+      "warehouse_code": "01",
+      "on_hand_qty": 100.0,
+      "on_order_qty": 50.0,
+      "committed_qty": 25.0,
+      "available_qty": 75.0,
+      "uom": "EA"
+    }
+  ]
+}

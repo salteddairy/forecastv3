@@ -1,0 +1,19 @@
+[project]
+name = "sap-forecast-analyzer"
+version = "0.1.0"
+description = "Forecasting and TCO optimization for SAP Business One"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "statsmodels>=0.14.0",
+    "prophet>=1.1.5",
+    "streamlit>=1.31.0",
+    "plotly>=5.18.0",
+    "scipy>=1.12.0",
+    "pyyaml>=6.0"
+]
+
+[tool.setuptools]
+packages = ["src"]

@@ -1,0 +1,136 @@
+# Inventory Optimization Configuration
+# This file contains all parameters for the constrained EOQ optimization model
+
+# ============================================================
+# CARRYING COST COMPONENTS
+# ============================================================
+# Annual cost to hold inventory, expressed as percentage of unit cost
+# Total = 8% + 10% + 2% + 5% = 25% annually
+carrying_cost:
+  cost_of_capital_percent: 0.08      # Cost of capital (interest rate, opportunity cost)
+  storage_percent: 0.10               # Warehousing, rent, utilities, handling
+  service_percent: 0.02               # Insurance, taxes
+  risk_percent: 0.05                  # Obsolescence, shrinkage, damage, spoilage
+  total_carrying_cost_percent: 0.25   # SUM = 25% annually
+
+# ============================================================
+# TRANSPORTATION COST STRUCTURE
+# ============================================================
+# Cost parameters for shipping and order processing
+transportation:
+  # Fixed ordering costs (admin, receiving, inspection)
+  ordering_cost_per_order: 50.0
+
+  # Freight cost structure
+  ftl_minimum_units: 500              # Full truckload threshold (units)
+  ftl_fixed_cost: 1500.0              # FTL flat rate ($1500 per truckload)
+  ltl_cost_per_unit: 2.50             # Less-than-truckload per-unit rate
+  ltl_fixed_cost: 150.0               # LTL fixed charge (pickup, handling)
+
+  # Volume discount breakpoints
+  # Order more → get discount on merchandise value (not freight)
+  volume_discount_tiers:
+    - min_units: 0
+      discount_pct: 0.00              # No discount
+    - min_units: 100
+      discount_pct: 0.05              # 5% discount for 100+ units
+    - min_units: 500
+      discount_pct: 0.10              # 10% discount for 500+ units
+    - min_units: 1000
+      discount_pct: 0.15              # 15% discount for 1000+ units
+
+# ============================================================
+# WAREHOUSE CAPACITY CONSTRAINTS
+# ============================================================
+warehouse:
+  # Total warehouse capacity
+  total_capacity_sqft: 50000          # Total warehouse space (square feet)
+
+  # Maximum utilization target
+  # Keep 15% free for aisles, operations, emergencies
+  max_utilization_pct: 0.85           # Use 85% of space max
+
+  # Space requirements per unit (square feet)
+  # Adjust based on your actual product dimensions
+  space_per_unit_sqft:
+    default: 1.0                      # Default: 1 sq ft per unit
+    FG-RE: 0.5                        # Finished goods - Refrigerated: 0.5 sq ft
+    FG-FZ: 0.3                        # Frozen goods: 0.3 sq ft
+    RM-BULK: 2.0                      # Raw materials bulk: 2 sq ft
+    SMALL: 0.2                        # Small items: 0.2 sq ft
+    LARGE: 3.0                        # Large/bulky items: 3 sq ft
+
+  # ABC Classification Space Allocation
+  # How to allocate limited warehouse space
+  # A items (high turnover): Get 80% of space
+  # B items (medium turnover): Get 15% of space
+  # C items (low turnover): Get 5% of space
+  abc_space_allocation:
+    A: 0.80
+    B: 0.15
+    C: 0.05
+
+# ============================================================
+# SERVICE LEVEL & LEAD TIME
+# ============================================================
+service_level:
+  # Target fill rate (probability of not stocking out)
+  # 95% service level = Z-score of 1.65
+  # 99% service level = Z-score of 2.33
+  target_fill_rate: 0.95              # 95% service level
+
+  # Extra safety buffer (in days)
+  # Adds extra safety stock beyond statistical calculation
+  lead_time_buffer_days: 7            # 1 week buffer
+
+  # Maximum time between orders
+  # Don't order more than X months of supply at once
+  max_order_cycle_days: 90            # Review orders at least quarterly (3 months)
+
+# ============================================================
+# OPTIMIZATION CONSTRAINTS
+# ============================================================
+constraints:
+  # Maximum order quantity (months of supply)
+  # Prevents ordering a full year's supply at once
+  max_order_quantity_months: 6        # Don't order more than 6 months supply
+
+  # Minimum order value (dollars)
+  # Don't place orders below this value
+  min_order_value: 100.0              # Minimum $100 per order
+
+  # Minimum order quantity (units)
+  # Minimum units to order
+  min_order_quantity: 1               # Minimum 1 unit
+
+  # Rounding precision
+  # Round order quantities to nearest unit
+  round_to_nearest: 1                 # Round to whole units
+
+# ============================================================
+# HOW TO CUSTOMIZE THIS FILE
+# ============================================================
+#
+# 1. CARRYING COST:
+#    - Adjust cost_of_capital_percent based on your interest rates
+#    - Adjust storage_percent based on your warehousing costs
+#    - Adjust risk_percent based on spoilage/obsolescence rates
+#
+# 2. TRANSPORTATION:
+#    - Update ftl_minimum_units based on your truck capacity
+#    - Update ftl_fixed_cost based on your carrier rates
+#    - Adjust volume_discount_tiers based on supplier discounts
+#
+# 3. WAREHOUSE:
+#    - Set total_capacity_sqft to your actual warehouse size
+#    - Adjust max_utilization_pct (typically 80-90%)
+#    - Update space_per_unit_sqft based on product dimensions
+#    - Adjust abc_space_allocation based on your product mix
+#
+# 4. SERVICE LEVEL:
+#    - target_fill_rate: 0.95 (95%), 0.99 (99%) for critical items
+#    - lead_time_buffer_days: 7-14 days for longer/sauffer lead times
+#
+# 5. CONSTRAINTS:
+#    - max_order_quantity_months: Lower for perishables, higher for stable items
+#    - min_order_value: Set based on your order processing costs

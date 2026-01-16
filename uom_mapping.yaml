@@ -1,0 +1,65 @@
+# UOM Conversion Mapping
+# Maps item description patterns to purchase UOM to sales UOM conversion factors
+# Formula: Sales Quantity = Purchase Quantity / Conversion Factor
+
+# Default conversions (purchase UOM -> sales UOM)
+conversions:
+  # Pail conversions
+  - pattern: "pail"
+    purchase_uom: "gram"
+    sales_uom: "pail"
+    conversion_factor: 1000  # 1000 grams per pail
+    description: "Standard pail = 1000g"
+
+  # Drum conversions
+  - pattern: "drum"
+    purchase_uom: "kilogram"
+    sales_uom: "drum"
+    conversion_factor: 200  # 200 kg per drum (standard)
+    description: "Standard drum = 200kg"
+
+  # Tote conversions
+  - pattern: "tote"
+    purchase_uom: "kilogram"
+    sales_uom: "tote"
+    conversion_factor: 1000  # 1000 kg per tote
+    description: "Standard tote = 1000kg"
+
+  # Bag conversions
+  - pattern: "bag"
+    purchase_uom: "kilogram"
+    sales_uom: "bag"
+    conversion_factor: 25  # 25 kg per bag (typical)
+    description: "Standard bag = 25kg"
+
+  # Jug/Gallon conversions
+  - pattern: "jug|gallon"
+    purchase_uom: "milliliter"
+    sales_uom: "gallon"
+    conversion_factor: 3785  # 3785 ml per gallon
+    description: "1 gallon = 3785 ml"
+
+  # Liter conversions
+  - pattern: "\\blitre\\b|\\bliter\\b"
+    purchase_uom: "milliliter"
+    sales_uom: "liter"
+    conversion_factor: 1000  # 1000 ml per liter
+    description: "1 liter = 1000 ml"
+
+# Fallback for items without pattern match
+default_conversion:
+  factor: 1.0  # No conversion if pattern not found
+  apply_to_all: false  # If true, applies default conversion to all items
+
+# Items requiring manual UOM mapping (add specific items here)
+manual_mappings:
+  - item_code: "30555C-DEL"
+    conversion_factor: 1000  # 1000 grams per pail
+    sales_uom: "pail"
+    notes: "Confirmed with warehouse"
+
+# Validation rules
+validation:
+  max_conversion_factor: 10000  # Alert if conversion factor seems too large
+  min_stock_after_conversion: 0.01  # Minimum stock level after conversion
+  warn_large_discrepancy: 100  # Warn if purchase quantity >> sales quantity

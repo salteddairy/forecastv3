@@ -1,0 +1,930 @@
+# Database Schema Design - SAP B1 Inventory & Forecast Web Application
+
+## Architecture Overview
+
+**Tech Stack Recommendations:**
+- **Backend**: FastAPI (Python) - Async, type-safe, excellent for ML/AI workloads
+- **Database**: PostgreSQL (on Railway) - ACID compliant, excellent JSON support
+- **ORM**: SQLAlchemy 2.0 - Modern async ORM
+- **Cache**: Redis (on Railway) - For forecast caching and session management
+- **Task Queue**: Celery + Redis - For background forecasting jobs
+- **Frontend**: Vue 3 / React + TypeScript - OR keep Streamlit embedded
+- **File Storage**: Railway Volume or AWS S3 - For TSV exports and reports
+
+---
+
+## Database Schema
+
+### 1. Core Tables (Master Data)
+
+#### `items`
+Item master data - products in your catalog
+
+```sql
+CREATE TABLE items (
+    -- Primary Keys
+    item_code              VARCHAR(50) PRIMARY KEY,
+    sap_item_code          VARCHAR(50) UNIQUE,
+
+    -- Basic Info
+    item_description       VARCHAR(500) NOT NULL,
+    item_type              VARCHAR(50), -- Finished Goods, Raw Material, etc.
+    product_group          VARCHAR(100),
+    brand                  VARCHAR(100),
+    category_l1            VARCHAR(100), -- Category hierarchy
+    category_l2            VARCHAR(100),
+    category_l3            VARCHAR(100),
+
+    -- UOM (Unit of Measure)
+    base_uom               VARCHAR(20) NOT NULL,          -- Inventory UOM (Litre, kg, ea)
+    sales_uom              VARCHAR(20),                  -- Sales UOM (Pail, Drum, Case)
+    qty_per_sales_uom      DECIMAL(10,3),                -- Conversion factor
+
+    -- Dimensions (for warehouse optimization)
+    length_cm              DECIMAL(10,2),
+    width_cm               DECIMAL(10,2),
+    height_cm              DECIMAL(10,2),
+    weight_kg              DECIMAL(10,2),
+    units_per_skid         INTEGER,
+
+    -- Status
+    is_active              BOOLEAN DEFAULT TRUE,
+    discontinued_date      DATE,
+
+    -- SAP Sync
+    sap_sync_timestamp     TIMESTAMP WITH TIME ZONE,
+    sap_last_modified      TIMESTAMP WITH TIME ZONE,
+
+    -- Audit
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Indexes
+    CONSTRAINT chk_qty_per_sales_uom_positive CHECK (qty_per_sales_uom > 0 OR qty_per_sales_uom IS NULL)
+);
+
+CREATE INDEX idx_items_product_group ON items(product_group);
+CREATE INDEX idx_items_category_l1 ON items(category_l1);
+CREATE INDEX idx_items_brand ON items(brand);
+CREATE INDEX idx_items_active ON items(is_active);
+```
+
+#### `warehouses`
+Warehouse/location definitions
+
+```sql
+CREATE TABLE warehouses (
+    warehouse_code         VARCHAR(20) PRIMARY KEY,
+    warehouse_name         VARCHAR(200) NOT NULL,
+    region                 VARCHAR(100),
+    address                TEXT,
+    capacity_skids         INTEGER,                     -- Max skid capacity
+
+    -- Spatial Data
+    latitude               DECIMAL(10,8),
+    longitude              DECIMAL(11,8),
+
+    is_active              BOOLEAN DEFAULT TRUE,
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+#### `vendors`
+Supplier master data
+
+```sql
+CREATE TABLE vendors (
+    vendor_code            VARCHAR(50) PRIMARY KEY,
+    vendor_name            VARCHAR(500) NOT NULL,
+
+    -- Contact Info
+    contact_name           VARCHAR(200),
+    email                  VARCHAR(255),
+    phone                  VARCHAR(50),
+
+    -- Performance
+    preferred_vendor_rank  INTEGER,                     -- 1 = most preferred
+    reliability_score      DECIMAL(3,2),                -- 0.00 to 1.00
+
+    -- SAP Sync
+    sap_sync_timestamp     TIMESTAMP WITH TIME ZONE,
+
+    is_active              BOOLEAN DEFAULT TRUE,
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+---
+
+### 2. Pricing & Margins (NEW REQUIREMENT)
+
+#### `pricing`
+Current pricing data
+
+```sql
+CREATE TABLE pricing (
+    -- Composite Key
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code) ON DELETE CASCADE,
+    price_level            VARCHAR(20) NOT NULL,       -- List, Wholesale, Retail, etc.
+    region                 VARCHAR(50),                -- Regional pricing (optional)
+    warehouse_code         VARCHAR(20),                -- Warehouse-specific pricing (optional)
+
+    -- Pricing Data
+    unit_price             DECIMAL(12,4) NOT NULL,     -- Selling price
+    currency               VARCHAR(3) DEFAULT 'CAD',
+    minimum_order_qty      DECIMAL(10,3),
+    quantity_break_qty     DECIMAL(10,3),              -- Price break threshold
+
+    -- SAP Sync
+    sap_sync_timestamp     TIMESTAMP WITH TIME ZONE,
+    sap_price_list_code    VARCHAR(50),
+
+    -- Validity
+    effective_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+    expiry_date            DATE,
+
+    is_active              BOOLEAN DEFAULT TRUE,
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    PRIMARY KEY (item_code, price_level, COALESCE(region, ''), COALESCE(warehouse_code, '')),
+    CONSTRAINT chk_pricing_dates CHECK (expiry_date IS NULL OR expiry_date >= effective_date)
+);
+
+CREATE INDEX idx_pricing_item_code ON pricing(item_code);
+CREATE INDEX idx_pricing_price_level ON pricing(price_level);
+CREATE INDEX idx_pricing_active ON pricing(is_active) WHERE is_active = TRUE;
+```
+
+#### `costs`
+Cost data for margin calculations
+
+```sql
+CREATE TABLE costs (
+    -- Composite Key
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code) ON DELETE CASCADE,
+    vendor_code            VARCHAR(50) REFERENCES vendors(vendor_code),
+    cost_type              VARCHAR(50) NOT NULL,       -- Standard, LastPurchase, Average, etc.
+
+    -- Cost Data
+    unit_cost              DECIMAL(12,4) NOT NULL,     -- Purchase/Landed cost
+    currency               VARCHAR(3) DEFAULT 'CAD',
+    freight_cost           DECIMAL(12,4),              -- Per-unit freight
+    duty_cost              DECIMAL(12,4),              -- Per-unit duty/brokerage
+    other_cost             DECIMAL(12,4),              -- Other landed costs
+
+    -- Total Landed Cost (calculated)
+    total_landed_cost      DECIMAL(12,4) GENERATED ALWAYS AS (
+        unit_cost + COALESCE(freight_cost, 0) + COALESCE(duty_cost, 0) + COALESCE(other_cost, 0)
+    ) STORED,
+
+    -- SAP Sync
+    sap_sync_timestamp     TIMESTAMP WITH TIME ZONE,
+
+    -- Validity
+    effective_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+
+    is_active              BOOLEAN DEFAULT TRUE,
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    PRIMARY KEY (item_code, cost_type, COALESCE(vendor_code, ''), effective_date),
+    CONSTRAINT chk_costs_positive CHECK (unit_cost >= 0)
+);
+
+CREATE INDEX idx_costs_item_code ON costs(item_code);
+CREATE INDEX idx_costs_vendor_code ON costs(vendor_code);
+CREATE INDEX idx_costs_effective_date ON costs(effective_date DESC);
+```
+
+#### `margins`
+Calculated margin snapshots (for historical tracking)
+
+```sql
+CREATE TABLE margins (
+    -- Composite Key
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code) ON DELETE CASCADE,
+    price_level            VARCHAR(20) NOT NULL,
+    region                 VARCHAR(50),
+    snapshot_date          DATE NOT NULL,
+
+    -- Pricing
+    unit_price             DECIMAL(12,4),
+    unit_cost              DECIMAL(12,4),
+    total_landed_cost      DECIMAL(12,4),
+
+    -- Margin Calculations
+    gross_margin_amt       DECIMAL(12,4),              -- Price - Cost
+    gross_margin_pct       DECIMAL(5,2),               -- (Price - Cost) / Price * 100
+    markup_pct             DECIMAL(5,2),               -- (Price - Cost) / Cost * 100
+
+    -- Classification
+    margin_category        VARCHAR(20),                -- High, Medium, Low, Negative
+
+    -- Metadata
+    calculated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    PRIMARY KEY (item_code, price_level, COALESCE(region, ''), snapshot_date)
+);
+
+CREATE INDEX idx_margins_snapshot_date ON margins(snapshot_date DESC);
+CREATE INDEX idx_margins_item_code ON margins(item_code);
+CREATE INDEX idx_margins_category ON margins(margin_category);
+```
+
+---
+
+### 3. Inventory Status (NEW REQUIREMENT)
+
+#### `inventory_current`
+Current inventory status (real-time view)
+
+```sql
+CREATE TABLE inventory_current (
+    -- Composite Key
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code) ON DELETE CASCADE,
+    warehouse_code         VARCHAR(20) NOT NULL REFERENCES warehouses(warehouse_code),
+
+    -- Stock Levels
+    on_hand_qty            DECIMAL(12,3) NOT NULL DEFAULT 0,
+    on_order_qty           DECIMAL(12,3) NOT NULL DEFAULT 0,    -- NEW: Open POs
+    committed_qty          DECIMAL(12,3) NOT NULL DEFAULT 0,   -- NEW: Allocated/Sales Orders
+    available_qty          DECIMAL(12,3) GENERATED ALWAYS AS (
+        on_hand_qty + on_order_qty - committed_qty
+    ) STORED,
+
+    -- UOM
+    uom                    VARCHAR(20) NOT NULL,
+
+    -- Valuation
+    unit_cost              DECIMAL(12,4),
+    total_value            DECIMAL(15,2) GENERATED ALWAYS AS (
+        on_hand_qty * COALESCE(unit_cost, 0)
+    ) STORED,
+
+    -- Timestamps
+    last_stock_movement    TIMESTAMP WITH TIME ZONE,
+    sap_sync_timestamp     TIMESTAMP WITH TIME ZONE,
+
+    -- Audit
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    PRIMARY KEY (item_code, warehouse_code),
+    CONSTRAINT chk_inventory_non_negative CHECK (on_hand_qty >= 0)
+);
+
+CREATE INDEX idx_inventory_current_available ON inventory_current(available_qty) WHERE available_qty > 0;
+CREATE INDEX idx_inventory_current_warehouse ON inventory_current(warehouse_code);
+```
+
+#### `inventory_transactions`
+Full transaction history for audit trail
+
+```sql
+CREATE TABLE inventory_transactions (
+    transaction_id         BIGSERIAL PRIMARY KEY,
+    transaction_date       TIMESTAMP WITH TIME ZONE NOT NULL,
+    transaction_type       VARCHAR(20) NOT NULL,       -- Receipt, Issue, Transfer, Adjustment, Order, Commitment
+
+    -- Item & Location
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code),
+    warehouse_code         VARCHAR(20) REFERENCES warehouses(warehouse_code),
+    bin_location           VARCHAR(50),
+
+    -- Quantities
+    quantity               DECIMAL(12,3) NOT NULL,     -- Positive for receipts, negative for issues
+    on_order_qty_change    DECIMAL(12,3),              -- For order commitments
+    committed_qty_change   DECIMAL(12,3),              -- For sales order commitments
+
+    -- References
+    document_type          VARCHAR(20),                -- PO, SO, Transfer, etc.
+    document_number        VARCHAR(50),
+    document_line          INTEGER,
+
+    -- Costing
+    unit_cost              DECIMAL(12,4),
+    total_cost             DECIMAL(15,2),
+
+    -- Vendor/Customer
+    vendor_code            VARCHAR(50) REFERENCES vendors(vendor_code),
+    customer_code          VARCHAR(50),
+
+    -- Metadata
+    reference              TEXT,
+    notes                  TEXT,
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_inv_trans_item_code ON inventory_transactions(item_code, transaction_date DESC);
+CREATE INDEX idx_inv_trans_type ON inventory_transactions(transaction_type, transaction_date DESC);
+CREATE INDEX idx_inv_trans_document ON inventory_transactions(document_type, document_number);
+```
+
+---
+
+### 4. Sales & Orders (Demand Data)
+
+#### `sales_orders`
+Sales orders header
+
+```sql
+CREATE TABLE sales_orders (
+    order_number           VARCHAR(50) PRIMARY KEY,
+    order_date             DATE NOT NULL,
+    customer_code          VARCHAR(50),
+    customer_name          VARCHAR(500),
+    region                 VARCHAR(50),
+
+    -- Order Type
+    order_type             VARCHAR(20),                -- Standard, Rush, Blanket, etc.
+
+    -- Linked Special Order (back-to-back)
+    linked_po_number       VARCHAR(50),                -- Linked to special order PO
+
+    -- Totals
+    total_quantity         DECIMAL(12,3),
+    total_value            DECIMAL(15,2),
+    currency               VARCHAR(3) DEFAULT 'CAD',
+
+    -- Status
+    status                 VARCHAR(20) DEFAULT 'Open', -- Open, Shipped, Closed
+
+    -- SAP Sync
+    sap_sync_timestamp     TIMESTAMP WITH TIME ZONE,
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_sales_orders_date ON sales_orders(order_date DESC);
+CREATE INDEX idx_sales_orders_customer ON sales_orders(customer_code);
+CREATE INDEX idx_sales_orders_status ON sales_orders(status);
+```
+
+#### `sales_order_lines`
+Sales order line items
+
+```sql
+CREATE TABLE sales_order_lines (
+    line_id                BIGSERIAL PRIMARY KEY,
+    order_number           VARCHAR(50) NOT NULL REFERENCES sales_orders(order_number),
+    line_number            INTEGER NOT NULL,
+
+    -- Item
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code),
+    item_description       VARCHAR(500),
+
+    -- Quantities
+    ordered_qty            DECIMAL(12,3) NOT NULL,
+    shipped_qty            DECIMAL(12,3) DEFAULT 0,
+    backorder_qty          DECIMAL(12,3) GENERATED ALWAYS AS (ordered_qty - shipped_qty) STORED,
+
+    -- Pricing
+    unit_price             DECIMAL(12,4) NOT NULL,
+    discount_pct           DECIMAL(5,2) DEFAULT 0,
+    net_price              DECIMAL(12,4) GENERATED ALWAYS AS (
+        unit_price * (1 - discount_pct/100)
+    ) STORED,
+    line_value             DECIMAL(15,2) GENERATED ALWAYS AS (
+        ordered_qty * net_price
+    ) STORED,
+
+    -- Cost & Margin (for sales analysis)
+    unit_cost              DECIMAL(12,4),
+    line_cost              DECIMAL(15,2),
+    line_margin            DECIMAL(15,2) GENERATED ALWAYS AS (line_value - COALESCE(line_cost, 0)) STORED,
+    margin_pct             DECIMAL(5,2),
+
+    -- Dates
+    promise_date           DATE,
+    ship_date              DATE,
+
+    UNIQUE(order_number, line_number)
+);
+
+CREATE INDEX idx_sales_lines_item ON sales_order_lines(item_code);
+CREATE INDEX idx_sales_lines_status ON sales_order_lines(shipped_qty, ordered_qty);
+```
+
+---
+
+### 5. Supply & Procurement
+
+#### `purchase_orders`
+Purchase orders header
+
+```sql
+CREATE TABLE purchase_orders (
+    po_number              VARCHAR(50) PRIMARY KEY,
+    po_date                DATE NOT NULL,
+    vendor_code            VARCHAR(50) NOT NULL REFERENCES vendors(vendor_code),
+
+    -- Order Type
+    order_type             VARCHAR(20),                -- Standard, Blanket, Dropship
+
+    -- Totals
+    total_quantity         DECIMAL(12,3),
+    total_value            DECIMAL(15,2),
+    currency               VARCHAR(3) DEFAULT 'CAD',
+
+    -- Dates
+    expected_delivery_date DATE,
+    actual_delivery_date   DATE,
+
+    -- Lead Time Tracking
+    supplier_lead_time_days INTEGER,
+
+    -- Status
+    status                 VARCHAR(20) DEFAULT 'Open',  -- Open, Partial, Received, Closed
+
+    -- SAP Sync
+    sap_sync_timestamp     TIMESTAMP WITH TIME ZONE,
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_purchase_orders_vendor ON purchase_orders(vendor_code, po_date DESC);
+CREATE INDEX idx_purchase_orders_status ON purchase_orders(status);
+```
+
+#### `purchase_order_lines`
+Purchase order line items
+
+```sql
+CREATE TABLE purchase_order_lines (
+    line_id                BIGSERIAL PRIMARY KEY,
+    po_number              VARCHAR(50) NOT NULL REFERENCES purchase_orders(po_number),
+    line_number            INTEGER NOT NULL,
+
+    -- Item
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code),
+    item_description       VARCHAR(500),
+
+    -- Quantities
+    ordered_qty            DECIMAL(12,3) NOT NULL,
+    received_qty           DECIMAL(12,3) DEFAULT 0,
+    open_qty               DECIMAL(12,3) GENERATED ALWAYS AS (ordered_qty - received_qty) STORED,
+
+    -- Pricing
+    unit_cost              DECIMAL(12,4) NOT NULL,
+    line_value             DECIMAL(15,2) GENERATED ALWAYS AS (ordered_qty * unit_cost) STORED,
+
+    -- Dates
+    promise_date           DATE,
+    received_date          DATE,
+
+    -- Warehouse
+    warehouse_code         VARCHAR(20) REFERENCES warehouses(warehouse_code),
+
+    UNIQUE(po_number, line_number)
+);
+
+CREATE INDEX idx_po_lines_item ON purchase_order_lines(item_code);
+CREATE INDEX idx_po_lines_open ON purchase_order_lines(open_qty) WHERE open_qty > 0;
+```
+
+---
+
+### 6. Forecasting
+
+#### `forecasts`
+Generated forecast results (12-month)
+
+```sql
+CREATE TABLE forecasts (
+    -- Composite Key
+    forecast_id            BIGSERIAL PRIMARY KEY,
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code),
+    forecast_generated_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    -- Model Info
+    winning_model          VARCHAR(50) NOT NULL,       -- SMA, Prophet, Holt-Winters, etc.
+    forecast_horizon       INTEGER NOT NULL,           -- 12 months
+    forecast_confidence_pct DECIMAL(5,2),
+
+    -- Historical Data Metrics
+    history_months         INTEGER,
+    train_months           INTEGER,
+    test_months            INTEGER,
+    avg_monthly_demand     DECIMAL(12,3),
+    demand_cv              DECIMAL(10,2),              -- Coefficient of variation
+
+    -- 12 Month Forecast
+    forecast_month_1       DECIMAL(12,3),
+    forecast_month_2       DECIMAL(12,3),
+    forecast_month_3       DECIMAL(12,3),
+    forecast_month_4       DECIMAL(12,3),
+    forecast_month_5       DECIMAL(12,3),
+    forecast_month_6       DECIMAL(12,3),
+    forecast_month_7       DECIMAL(12,3),
+    forecast_month_8       DECIMAL(12,3),
+    forecast_month_9       DECIMAL(12,3),
+    forecast_month_10      DECIMAL(12,3),
+    forecast_month_11      DECIMAL(12,3),
+    forecast_month_12      DECIMAL(12,3),
+
+    -- Model Performance
+    rmse_sma               DECIMAL(10,2),
+    rmse_holt_winters      DECIMAL(10,2),
+    rmse_prophet           DECIMAL(10,2),
+    rmse_arima             DECIMAL(10,2),
+    rmse_sarimax           DECIMAL(10,2),
+    rmse_theta             DECIMAL(10,2),
+
+    -- Metadata
+    forecast_period_start  DATE NOT NULL,              -- First month of forecast
+    status                 VARCHAR(20) DEFAULT 'Active', -- Active, Superseded
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    UNIQUE(item_code, forecast_generated_at)
+);
+
+CREATE INDEX idx_forecasts_item_date ON forecasts(item_code, forecast_generated_at DESC);
+CREATE INDEX idx_forecasts_status ON forecasts(status) WHERE status = 'Active';
+CREATE INDEX idx_forecasts_model ON forecasts(winning_model);
+```
+
+#### `forecast_accuracy`
+Historical accuracy tracking
+
+```sql
+CREATE TABLE forecast_accuracy (
+    accuracy_id            BIGSERIAL PRIMARY KEY,
+    snapshot_id            VARCHAR(50) NOT NULL,       -- References forecast snapshot
+    snapshot_date          TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    -- Item & Model
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code),
+    winning_model          VARCHAR(50) NOT NULL,
+    forecast_confidence_pct DECIMAL(5,2),
+
+    -- Comparison
+    months_compared        INTEGER NOT NULL,
+    forecast_horizon       INTEGER NOT NULL,
+
+    -- Accuracy Metrics
+    mape                   DECIMAL(10,2),              -- Mean Absolute Percentage Error
+    rmse                   DECIMAL(10,2),              -- Root Mean Square Error
+    bias                   DECIMAL(12,3),              -- Mean forecast error
+    mae                    DECIMAL(12,3),              -- Mean Absolute Error
+    tracking_signal        DECIMAL(10,2),              -- Cumulative error / MAD
+
+    -- Totals
+    total_forecast         DECIMAL(12,3),
+    total_actual           DECIMAL(12,3),
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_forecast_accuracy_item ON forecast_accuracy(item_code, snapshot_date DESC);
+CREATE INDEX idx_forecast_accuracy_snapshot ON forecast_accuracy(snapshot_id);
+```
+
+#### `forecast_snapshots`
+Snapshot metadata for historical tracking
+
+```sql
+CREATE TABLE forecast_snapshots (
+    snapshot_id            VARCHAR(50) PRIMARY KEY,
+    snapshot_date          TIMESTAMP WITH TIME ZONE NOT NULL,
+    item_count             INTEGER NOT NULL,
+
+    -- Metadata
+    generated_by           VARCHAR(100),               -- User or system
+    generation_method      VARCHAR(50),                -- Automatic, Manual, API
+    data_sources           JSONB,                      -- Hashes of input files
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+---
+
+### 7. Inventory Optimization
+
+#### `stock_recommendations`
+Stock vs Special Order recommendations (TCO analysis)
+
+```sql
+CREATE TABLE stock_recommendations (
+    recommendation_id      BIGSERIAL PRIMARY KEY,
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code),
+    warehouse_code         VARCHAR(20) REFERENCES warehouses(warehouse_code),
+    region                 VARCHAR(50),
+
+    generated_at           TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    -- TCO Analysis
+    annual_demand          DECIMAL(12,3),
+    carrying_cost_pct      DECIMAL(5,2),
+    order_cost             DECIMAL(12,2),
+
+    tco_stock              DECIMAL(15,2),
+    tco_special_order      DECIMAL(15,2),
+    tco_savings            DECIMAL(15,2),
+
+    -- Recommendation
+    recommendation         VARCHAR(20),                -- Stock, Special_Order, Either
+    confidence_score       DECIMAL(3,2),
+
+    -- Parameters
+    current_stock_months   DECIMAL(5,2),
+    supplier_lead_time     INTEGER,
+
+    valid_until            DATE,
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_stock_recs_item ON stock_recommendations(item_code, generated_at DESC);
+CREATE INDEX idx_stock_recs_recommendation ON stock_recommendations(recommendation);
+```
+
+#### `shortage_alerts`
+Current stockout predictions
+
+```sql
+CREATE TABLE shortage_alerts (
+    alert_id               BIGSERIAL PRIMARY KEY,
+    item_code              VARCHAR(50) NOT NULL REFERENCES items(item_code),
+    warehouse_code         VARCHAR(20) REFERENCES warehouses(warehouse_code),
+
+    generated_at           TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    -- Current Status
+    current_stock          DECIMAL(12,3),
+    on_order_stock         DECIMAL(12,3),
+    committed_stock        DECIMAL(12,3),
+    available_stock        DECIMAL(12,3),
+
+    -- Forecast
+    forecast_period_demand DECIMAL(12,3),
+    forecast_months        INTEGER,
+
+    -- Shortage Prediction
+    shortage_qty           DECIMAL(12,3),
+    days_until_stockout    INTEGER,
+    urgency                VARCHAR(20),                -- Critical, High, Medium, Low
+
+    -- Action Recommended
+    action_required        VARCHAR(100),
+    recommended_order_qty  DECIMAL(12,3),
+
+    -- Resolution
+    resolved_at            TIMESTAMP WITH TIME ZONE,
+    resolution_notes       TEXT,
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_shortage_alerts_item ON shortage_alerts(item_code, generated_at DESC);
+CREATE INDEX idx_shortage_alerts_urgency ON shortage_alerts(urgency) WHERE resolved_at IS NULL;
+```
+
+---
+
+### 8. Audit & System
+
+#### `sync_logs`
+SAP B1 sync history
+
+```sql
+CREATE TABLE sync_logs (
+    sync_id                BIGSERIAL PRIMARY KEY,
+    sync_type              VARCHAR(20) NOT NULL,       -- Full, Incremental
+    sync_start             TIMESTAMP WITH TIME ZONE NOT NULL,
+    sync_end               TIMESTAMP WITH TIME ZONE,
+
+    -- Records Processed
+    items_synced           INTEGER DEFAULT 0,
+    sales_synced           INTEGER DEFAULT 0,
+    purchases_synced       INTEGER DEFAULT 0,
+    inventory_synced       INTEGER DEFAULT 0,
+    pricing_synced         INTEGER DEFAULT 0,
+
+    -- Status
+    status                 VARCHAR(20) DEFAULT 'Running',
+    error_message          TEXT,
+
+    -- Data Hash
+    data_hash              VARCHAR(64),
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_sync_logs_start ON sync_logs(sync_start DESC);
+```
+
+#### `audit_log`
+System audit trail
+
+```sql
+CREATE TABLE audit_log (
+    audit_id               BIGSERIAL PRIMARY KEY,
+    event_timestamp        TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    user_id                VARCHAR(100),
+    action                 VARCHAR(50) NOT NULL,       -- CREATE, UPDATE, DELETE, VIEW, EXPORT
+    table_name             VARCHAR(50),
+    record_id              VARCHAR(100),
+
+    -- Change Details
+    old_values             JSONB,
+    new_values             JSONB,
+
+    -- Context
+    ip_address             INET,
+    user_agent             TEXT,
+
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_log_timestamp ON audit_log(event_timestamp DESC);
+CREATE INDEX idx_audit_log_user ON audit_log(user_id, event_timestamp DESC);
+CREATE INDEX idx_audit_log_action ON audit_log(action);
+```
+
+---
+
+## Views for Common Queries
+
+### `v_inventory_status_with_forecast`
+Combines inventory, orders, and forecasts
+
+```sql
+CREATE VIEW v_inventory_status_with_forecast AS
+SELECT
+    ic.item_code,
+    i.item_description,
+    ic.warehouse_code,
+    ic.on_hand_qty,
+    ic.on_order_qty,
+    ic.committed_qty,
+    ic.available_qty,
+    ic.uom,
+    ic.total_value,
+
+    -- Latest Forecast
+    f.winning_model,
+    f.forecast_confidence_pct,
+    f.forecast_month_1,
+    f.forecast_month_2,
+    f.forecast_month_3,
+    (f.forecast_month_1 + f.forecast_month_2 + f.forecast_month_3) AS forecast_3month_total,
+
+    -- Shortage Prediction
+    CASE
+        WHEN ic.available_qty < (f.forecast_month_1 + f.forecast_month_2 + f.forecast_month_3)
+        THEN (f.forecast_month_1 + f.forecast_month_2 + f.forecast_month_3) - ic.available_qty
+        ELSE 0
+    END AS potential_shortage_qty,
+
+    -- Margin Data
+    p.unit_price AS latest_list_price,
+    c.total_landed_cost AS latest_cost,
+    p.unit_price - c.total_landed_cost AS gross_margin_amt,
+    ((p.unit_price - c.total_landed_cost) / NULLIF(p.unit_price, 0)) * 100 AS gross_margin_pct,
+
+    -- Timestamps
+    ic.updated_at AS inventory_updated,
+    f.created_at AS forecast_generated
+
+FROM inventory_current ic
+JOIN items i ON ic.item_code = i.item_code
+LEFT JOIN LATERAL (
+    SELECT * FROM forecasts
+    WHERE forecasts.item_code = ic.item_code
+    AND forecasts.status = 'Active'
+    ORDER BY forecast_generated_at DESC
+    LIMIT 1
+) f ON true
+LEFT JOIN LATERAL (
+    SELECT * FROM pricing
+    WHERE pricing.item_code = ic.item_code
+    AND pricing.price_level = 'List'
+    AND pricing.is_active = TRUE
+    ORDER BY effective_date DESC
+    LIMIT 1
+) p ON true
+LEFT JOIN LATERAL (
+    SELECT * FROM costs
+    WHERE costs.item_code = ic.item_code
+    AND costs.cost_type = 'Standard'
+    ORDER BY effective_date DESC
+    LIMIT 1
+) c ON true;
+```
+
+### `v_item_margins`
+Item margin analysis
+
+```sql
+CREATE VIEW v_item_margins AS
+SELECT
+    i.item_code,
+    i.item_description,
+    i.product_group,
+    p.price_level,
+    p.region,
+    p.unit_price AS selling_price,
+    c.unit_cost,
+    c.total_landed_cost,
+
+    -- Margin Calculations
+    (p.unit_price - c.total_landed_cost) AS gross_margin_amt,
+    ((p.unit_price - c.total_landed_cost) / NULLIF(p.unit_price, 0)) * 100 AS gross_margin_pct,
+    ((p.unit_price - c.total_landed_cost) / NULLIF(c.total_landed_cost, 0)) * 100 AS markup_pct,
+
+    -- Classification
+    CASE
+        WHEN ((p.unit_price - c.total_landed_cost) / NULLIF(p.unit_price, 0)) * 100 >= 40 THEN 'High'
+        WHEN ((p.unit_price - c.total_landed_cost) / NULLIF(p.unit_price, 0)) * 100 >= 20 THEN 'Medium'
+        WHEN ((p.unit_price - c.total_landed_cost) / NULLIF(p.unit_price, 0)) * 100 >= 0 THEN 'Low'
+        ELSE 'Negative'
+    END AS margin_category,
+
+    -- Dates
+    p.effective_date AS price_effective_date,
+    c.effective_date AS cost_effective_date
+
+FROM items i
+JOIN pricing p ON i.item_code = p.item_code AND p.is_active = TRUE
+JOIN costs c ON i.item_code = c.item_code AND c.is_active = TRUE;
+```
+
+---
+
+## Database Migrations Strategy
+
+Create migration files using Alembic:
+
+```bash
+# Install
+pip install alembic
+
+# Initialize
+alembic init alembic
+
+# Create migration
+alembic revision --autogenerate -m "Initial schema"
+```
+
+---
+
+## Performance Optimizations
+
+### 1. Partitioning
+Consider partitioning large tables by date:
+- `sales_orders` by `order_date`
+- `inventory_transactions` by `transaction_date`
+- `forecasts` by `forecast_generated_at`
+
+### 2. Indexes Summary
+- Foreign keys: All indexed automatically
+- Frequently filtered: `item_code`, `warehouse_code`, `region`, `status`, `is_active`
+- Date ranges: `order_date DESC`, `forecast_generated_at DESC`
+- Composite: `(item_code, warehouse_code)`, `(item_code, date)`
+
+### 3. Materialized Views
+For heavy aggregations:
+- Monthly sales by item
+- Forecast accuracy trends
+- Margin analysis by category
+
+---
+
+## Data Dictionary
+
+| Table | Purpose | Key Fields | Approx. Rows |
+|-------|---------|------------|--------------|
+| `items` | Product catalog | item_code, description, UOM | 10,000 |
+| `warehouses` | Locations | warehouse_code, capacity | 10 |
+| `vendors` | Suppliers | vendor_code, name | 200 |
+| `pricing` | Selling prices | item_code, price_level, price | 50,000 |
+| `costs` | Landed costs | item_code, vendor, cost | 30,000 |
+| `margins` | Margin history | item_code, snapshot_date, margin % | 500,000 |
+| `inventory_current` | Current stock | item_code, warehouse, qty | 100,000 |
+| `inventory_transactions` | Transaction history | item_code, type, qty | 5M+ |
+| `sales_orders` | Sales headers | order_number, date, customer | 200,000 |
+| `sales_order_lines` | Sales lines | order_number, item, qty | 1M+ |
+| `purchase_orders` | PO headers | po_number, date, vendor | 100,000 |
+| `purchase_order_lines` | PO lines | po_number, item, qty | 500,000 |
+| `forecasts` | Forecast results | item_code, date, model | 120,000/year |
+| `forecast_accuracy` | Accuracy metrics | item_code, snapshot, MAPE | 120,000/year |
+| `stock_recommendations` | TCO analysis | item_code, recommendation | 10,000/month |
+| `shortage_alerts` | Stockout alerts | item_code, urgency | 50,000/month |
+
+---
+
+## Next Steps
+
+1. **Review and refine schema** - Adjust for your specific business needs
+2. **Set up PostgreSQL on Railway** - Create database instance
+3. **Create Alembic migrations** - Version control for schema changes
+4. **Build SQLAlchemy models** - Python ORM layer
+5. **Design REST API** - FastAPI endpoints
+6. **Implement SAP sync** - Data pipeline from SAP B1

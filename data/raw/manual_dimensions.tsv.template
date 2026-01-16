@@ -1,0 +1,21 @@
+# Manual Item Dimensions Template
+# Use this file to enter dimensions for items that don't have SAP dimension data
+#
+# Columns:
+# - Item No.: Item code (required)
+# - Length_cm: Length in centimeters (required)
+# - Width_cm: Width in centimeters (required)
+# - Height_cm: Height in centimeters (required)
+# - Weight_kg: Weight in kilograms (required)
+# - Units_Per_Skid: How many units fit on a standard 120x100cm skid (optional, will be calculated if omitted)
+# - Stacking_Allowed: TRUE if skids can be stacked, FALSE otherwise (optional, default: TRUE)
+#
+# Instructions:
+# 1. Remove this header line before using
+# 2. Enter one item per line
+# 3. Save as 'manual_dimensions.tsv' in the data/raw directory
+#
+# Example:
+# Item No.	Length_cm	Width_cm	Height_cm	Weight_kg	Units_Per_Skid	Stacking_Allowed
+# ITEM001	50	40	30	5	24	TRUE
+# ITEM002	30	20	15	2	80	TRUE

@@ -1,0 +1,82 @@
+# SAP B1 Inventory & Forecast Analyzer - Requirements.txt
+# This file lists all Python dependencies required to run the application.
+
+# ===== Core Dependencies =====
+# Data manipulation and analysis
+pandas>=2.3.0
+numpy>=2.0.0
+
+# Data serialization
+pyarrow>=22.0.0
+PyYAML>=6.0
+
+# ===== Web Application =====
+# Main web framework
+streamlit>=1.28.0
+
+# Interactive visualizations
+plotly>=5.18.0
+
+# ===== Forecasting =====
+# Facebook Prophet forecasting model
+prophet>=1.1.5
+
+# Statistical models and time series analysis
+statsmodels>=0.14.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+
+# ===== Testing =====
+# Testing framework
+pytest>=8.0.0
+pytest-cov>=4.0.0
+
+# ===== Utilities =====
+# Date handling
+python-dateutil>=2.8.0
+
+# Progress bars
+tqdm>=4.66.0
+
+# Parallel processing
+joblib>=1.3.0
+
+# ===== Optional Development Dependencies =====
+# Code formatting (uncomment if needed)
+# black>=24.0.0
+
+# Type checking (uncomment if needed)
+# mypy>=1.8.0
+
+# ===== Railway Deployment Dependencies =====
+# PostgreSQL database connection
+psycopg2-binary>=2.9.9
+
+# Redis caching
+redis>=5.0.1
+
+# SQLAlchemy ORM and connection pooling
+sqlalchemy>=2.0.25
+
+# ===== Azure AD Authentication =====
+# Microsoft Authentication Library
+msal>=1.26.0
+
+# ===== API Dependencies =====
+# FastAPI for backend API
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6
+
+# Data validation
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
+
+# Encryption for API communication
+cryptography>=41.0.7
+
+# Job scheduling for background worker
+apscheduler>=3.10.4
+
+# HTTP requests
+requests>=2.31.0

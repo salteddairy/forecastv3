@@ -1,0 +1,26 @@
+# Railway Worker Configuration
+# SAP B1 Inventory & Forecast Analyzer
+# Background Jobs (data processing, forecasts, materialized view refresh)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.worker"
+
+# Deploy as a background worker
+[[services]]
+name = "Background Worker"
+service_type = "worker"
+source_dir = "/"
+
+[services.env]
+# Worker settings
+WORKER_TYPE = "scheduler"
+LOG_LEVEL = "info"
+
+# Schedule settings (cron format)
+# Refresh materialized views daily at 2 AM UTC
+SCHEDULE_REFRESH_VIEWS = "0 2 * * *"
+# Run forecasts weekly on Sunday at 3 AM UTC
+SCHEDULE_RUN_FORECASTS = "0 3 * * 0"
+# Sync data from SAP hourly during business hours
+SCHEDULE_SYNC_DATA = "0 8-18 * * 1-5"

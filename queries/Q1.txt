@@ -1,0 +1,21 @@
+/* Query 1: Sales Order History (Normalized to Base Units) */
+SELECT 
+    T0.DocDate AS 'DocDate',
+    T1.ShipDate AS 'PromiseDate',
+    T0.CardCode AS 'CustomerCode',
+    T1.ItemCode,
+    T1.Dscription AS 'Description',
+    
+    /* CRITICAL CHANGE: Use Inventory Quantity */
+    T1.InvQty AS 'OrderedQty', /* Returns 189 (L) instead of 10 (Pails) */
+    
+    T1.OpenInvQty AS 'BacklogQty', /* Remaining work in Base Units */
+    T1.LineTotal AS 'RowValue',
+    T1.WhsCode AS 'Warehouse',
+    T1.U_SORDNUM AS 'Linked_SpecialOrder_Num',
+    'SalesOrder' AS 'DocType'
+FROM ORDR T0
+INNER JOIN RDR1 T1 ON T0.DocEntry = T1.DocEntry
+WHERE 
+    T0.CANCELED = 'N' 
+    AND T0.DocDate >= '2023-01-01'

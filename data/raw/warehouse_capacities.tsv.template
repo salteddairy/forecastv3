@@ -1,0 +1,21 @@
+# Warehouse Skid Space Capacities Template
+# Use this file to define warehouse capacity by location
+#
+# Columns:
+# - Location: Warehouse location code (required, e.g., CGY, TOR, EDM)
+# - Total_Skids: Total number of skid spaces available (required)
+# - Used_Skids: Currently occupied skid spaces (optional, calculated from stock if omitted)
+# - Skid_Length_cm: Standard skid length in cm (optional, default 120)
+# - Skid_Width_cm: Standard skid width in cm (optional, default 100)
+# - Max_Height_cm: Maximum stacking height in cm (optional, default 150)
+#
+# Instructions:
+# 1. Remove this header line before using
+# 2. Enter one location per line
+# 3. Save as 'warehouse_capacities.tsv' in the data/raw directory
+#
+# Example:
+# Location	Total_Skids	Used_Skids	Skid_Length_cm	Skid_Width_cm	Max_Height_cm
+# CGY	500	0	120	100	150
+# TOR	800	0	120	100	150
+# EDM	300	0	120	100	150

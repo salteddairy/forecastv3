@@ -1,0 +1,33 @@
+/* Query 3: Item Master (with UoM Definitions) */
+SELECT 
+    T0.ItemCode,
+    T0.ItemName,
+    T0.ItmsGrpCod AS 'ItemGroup',
+    
+    /* UOM LOGIC ADDITIONS */
+    T0.InvntryUom AS 'BaseUoM',     /* e.g., 'L' */
+    T0.BuyUnitMsr AS 'PurchUoM',    /* e.g., 'Pail' */
+    T0.NumInBuy AS 'QtyPerPurchUoM',/* e.g., 18.9 */
+    T0.SalUnitMsr AS 'SalesUoM',    /* e.g., 'Pail' */
+    T0.NumInSale AS 'QtyPerSalesUoM',
+    
+    /* VENDOR LOGIC */
+    T0.CardCode AS 'PreferredVendor',
+    T0.U_LPVENDC AS 'LastVendorCode_Fallback',
+    T0.U_LPVENDN AS 'LastVendorName_Fallback',
+    T0.U_LPDATE AS 'LastPurchaseDate_Fallback',
+    T0.U_LPPRICE AS 'LastPurchasePrice_Fallback',
+    
+    /* STOCK LOGIC */
+    T1.WhsCode AS 'Warehouse',
+    T1.OnHand AS 'CurrentStock',     /* Always in Base Units (Liters) */
+    T1.OnOrder AS 'IncomingStock',   /* Usually Base Units, but verify below */
+    T1.IsCommited AS 'CommittedStock',
+    T0.AvgPrice AS 'UnitCost',
+    T0.MinOrdrQty AS 'MOQ',          /* Usually in PURCHASING Units */
+    T0.OrdrMulti AS 'OrderMultiple'
+FROM OITM T0
+INNER JOIN OITW T1 ON T0.ItemCode = T1.ItemCode
+WHERE 
+    T0.InvntItem = 'Y' AND T0.validFor = 'Y'
+    AND (T1.OnHand + T1.OnOrder + T1.IsCommited) > 0

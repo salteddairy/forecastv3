@@ -1,0 +1,29 @@
+system_settings:
+  forecast_horizon_months: 6  # Max forecast horizon (actual horizon is dynamic per item)
+  outlier_threshold_sigma: 3.0
+  min_history_for_complex_model: 12 # months
+  # Dynamic Forecast Horizon Strategy (for 6+ turnovers/year goal)
+  # High velocity (>=100/mo, CV<0.5): 1-2 months
+  # Medium velocity (20-100/mo): 3-4 months
+  # Low velocity (<20/mo): 3-6 months max (seasonal gets 6)
+  # Goal: Product held max 2-3 months for fast turnover
+
+carrying_cost:
+  # The cost of money (Interest Rate / Opportunity Cost)
+  cost_of_capital_percent: 0.08      
+  # Annual Warehouse Expense (Rent + Utils) / Avg Inventory Value
+  storage_percent: 0.10              
+  # Insurance + Taxes
+  service_percent: 0.02              
+  # Shrinkage + Obsolescence + Damage
+  risk_percent: 0.05                 
+  # Total defaults to 25% if calculated manually
+
+shipping:
+  standard_freight_percent: 0.05     # 5% of COGS for stock orders
+  special_order_freight_percent: 0.15 # 15% of COGS for rushing single items
+  special_order_fixed_surcharge: 50.0 # $50 admin fee per special order
+
+defaults:
+  fallback_lead_time_days: 21
+  target_service_level: 0.95

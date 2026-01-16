@@ -1,0 +1,35 @@
+/* Query 3: Item Master (with UoM Definitions) - UPDATED */
+SELECT
+    T0.ItemCode AS 'Item No.',
+    T0.ItemName AS 'Item Description',
+    T0.ItmsGrpCod AS 'ItemGroup',
+
+    /* VENDOR INFO */
+    T0.CardCode AS 'PreferredVendor',
+    T0.U_LPVENDC AS 'LastVendorCode_Fallback',
+    T0.U_LPVENDN AS 'LastVendorName_Fallback',
+    T0.U_LPDATE AS 'LastPurchaseDate_Fallback',
+    T0.U_LPPRICE AS 'LastPurchasePrice_Fallback',
+
+    /* UOM FIELDS - CRITICAL FOR CONVERSION */
+    T0.InvntryUom AS 'BaseUoM',         /* e.g., 'L' (Litres) or 'kg' */
+    T0.BuyUnitMsr AS 'PurchUoM',        /* e.g., 'Pail', 'Drum', 'Bag' */
+    T0.NumInBuy AS 'QtyPerPurchUoM',     /* e.g., 18.9 Liters per Pail */
+    T0.SalUnitMsr AS 'SalesUoM',        /* e.g., 'Pail' */
+    T0.NumInSale AS 'QtyPerSalesUoM',    /* e.g., 18.9 (same as purch typically) */
+
+    /* STOCK LOGIC */
+    T1.WhsCode AS 'Warehouse',
+    T1.OnHand AS 'CurrentStock',         /* ALWAYS in Base Units (Litres/kg) */
+    T1.OnOrder AS 'IncomingStock',       /* Usually in Base Units */
+    T1.IsCommited AS 'CommittedStock',
+    T0.AvgPrice AS 'UnitCost',
+    T0.MinOrdrQty AS 'MOQ',
+    T0.OrdrMulti AS 'OrderMultiple'
+FROM OITM T0
+INNER JOIN OITW T1 ON T0.ItemCode = T1.ItemCode
+WHERE
+    T0.InvntItem = 'Y'
+    AND T0.validFor = 'Y'
+    AND (T1.OnHand + T1.OnOrder + T1.IsCommited) > 0
+ORDER BY T0.ItemCode, T1.WhsCode

@@ -1,0 +1,49 @@
+/* Query 2: Unified Supply (Normalized to Base Units) */
+/* PART A: HISTORY */
+SELECT 
+    'History' AS 'DataType',
+    T0.CardCode AS 'VendorCode',
+    T0.CardName AS 'VendorName',
+    T1.WhsCode AS 'Warehouse',
+    T1.ItemCode,
+    T2.DocDate AS 'PO_Date',
+    T0.DocDate AS 'EventDate',
+    DATEDIFF(day, T2.DocDate, T0.DocDate) AS 'LeadTimeDays',
+    
+    /* CRITICAL CHANGE */
+    T1.InvQty AS 'Quantity', /* Received Qty in Base Units */
+    
+    T1.LineTotal AS 'RowValue_SourceCurrency',
+    T0.DocCur AS 'Currency',
+    T0.DocRate AS 'ExchangeRate',
+    ISNULL(T0.U_FRTTERMS, 'Prepaid') AS 'FreightTerms',
+    T0.U_FOB AS 'FOB'
+FROM OPDN T0 
+INNER JOIN PDN1 T1 ON T0.DocEntry = T1.DocEntry
+LEFT JOIN OPOR T2 ON T1.BaseEntry = T2.DocEntry AND T1.BaseType = 22
+WHERE T0.CANCELED = 'N' AND T0.DocDate >= '2023-01-01' AND T2.DocDate IS NOT NULL
+
+UNION ALL
+
+/* PART B: SCHEDULE */
+SELECT 
+    'OpenPO' AS 'DataType',
+    T0.CardCode AS 'VendorCode',
+    T0.CardName AS 'VendorName',
+    T1.WhsCode AS 'Warehouse',
+    T1.ItemCode,
+    T0.DocDate AS 'PO_Date',
+    T1.ShipDate AS 'EventDate',
+    NULL AS 'LeadTimeDays',
+    
+    /* CRITICAL CHANGE */
+    T1.OpenInvQty AS 'Quantity', /* Remaining Expected Qty in Base Units */
+    
+    (T1.OpenQty * T1.Price) AS 'RowValue_SourceCurrency',
+    T0.DocCur AS 'Currency',
+    T0.DocRate AS 'ExchangeRate',
+    ISNULL(T0.U_FRTTERMS, 'Prepaid') AS 'FreightTerms',
+    T0.U_FOB AS 'FOB'
+FROM OPOR T0
+INNER JOIN POR1 T1 ON T0.DocEntry = T1.DocEntry
+WHERE T0.DocStatus = 'O' AND T1.LineStatus = 'O' AND T0.CANCELED = 'N'

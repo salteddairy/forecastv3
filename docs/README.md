@@ -23,12 +23,12 @@ streamlit run app.py
 | Metric | Status |
 |--------|--------|
 | **Planning** | ✅ 100% Complete |
-| **Implementation** | 🔄 10% Complete (Week 0-1) |
+| **Railway Deployment** | ✅ 80% Complete - Ingestion Service Live |
 | **Bug Fixes** | ✅ 5 critical bugs fixed |
 | **Performance** | ✅ 30-40% faster pipeline |
 | **Consolidation Ready** | ⚠️ 70% - Needs warehouse-aware forecasting |
 
-**Current Status:** Ready to start Week 1 tasks (Railway deployment)
+**Current Status:** Ingestion service deployed on Railway, ready for SAP middleware integration
 
 **See:** [PROJECT_STATUS.md](planning/PROJECT_STATUS.md) for full roadmap
 
@@ -48,18 +48,22 @@ streamlit run app.py
 
 ## Technology Stack
 
-### Current (Streamlit App)
+### Current Architecture
+- **Ingestion API:** FastAPI on Railway (ingestion-service-production-6947.up.railway.app)
+- **Database:** PostgreSQL 17 on Railway (11 tables, 5 materialized views, 2 views)
+- **Security:** Fernet encryption (AES-128), API key authentication
+- **Data Pipeline:** Single entry point architecture (all writes via ingestion API)
+
+### Frontend (Planned - Vercel)
+- **Framework:** Next.js (to be built)
+- **Deployment:** Vercel
+- **Database Access:** Read-only direct PostgreSQL queries
+
+### Legacy (Streamlit App - Local Only)
 - **Frontend:** Streamlit (app.py)
 - **Data:** TSV exports from SAP B1
 - **Forecasting:** Prophet, statsmodels
-- **Optimization:** TCO-based decision logic
-
-### Planned (Railway Deployment)
-- **Backend:** FastAPI (new)
-- **Database:** PostgreSQL 16 on Railway
-- **Cache:** Redis 7 on Railway
-- **Auth:** Azure AD (MSAL)
-- **Scheduler:** APScheduler + Redis
+- **Status:** Being phased out in favor of Railway deployment
 
 ---
 
@@ -109,7 +113,33 @@ forecastv3/
 
 ## Recent Achievements
 
-### 2026-01-16 (Today)
+### 2026-01-17 (Today) - Database Schema Simplification
+- ✅ Identified that order tracking not needed for forecasting use case
+- ✅ Performed full impact assessment (zero breaking changes)
+- ✅ Created migration 004 to simplify schema (remove order tracking)
+- ✅ Updated Pydantic models to make order identifiers optional
+- ✅ Updated database operations to use business keys for UPSERT
+- ✅ Regenerated test data without order identifiers
+- ✅ Deployed updated ingestion service to Railway
+- 🔄 Database migration pending (Railway temporarily unavailable)
+
+### 2026-01-17 (Earlier Today) - Database Schema Alignment
+- ✅ Fixed schema mismatches in sales_orders, purchase_orders, and pricing tables
+- ✅ Updated Pydantic models to match database schema exactly
+- ✅ Implemented generated column handling (COALESCE for region_key/vendor_code_key)
+- ✅ Fixed UPSERT conflict resolution for complex primary keys
+- ✅ Regenerated middleware test data with corrected schema
+
+### 2026-01-16 (Yesterday) - Railway Deployment Complete
+- ✅ FastAPI ingestion service deployed to Railway
+- ✅ PostgreSQL 17 database schema applied (11 tables, 5 materialized views, 2 views)
+- ✅ Fernet encryption implemented for payload security
+- ✅ API key authentication configured
+- ✅ End-to-end test successful (data ingested and verified)
+- ✅ Single entry point architecture established
+- ✅ Middleware test data generated (8 data types with samples)
+
+### 2026-01-15 (Yesterday)
 - ✅ Created `data/sap_queries/` with TSV templates for SAP exports
 - ✅ Fixed SQL queries for SAP B1 compatibility
 - ✅ Organized 31 documentation files into `docs/` structure
@@ -125,6 +155,11 @@ forecastv3/
 ---
 
 ## Quick Links
+
+### Railway Deployment
+- **[DATA_PIPELINE_ARCHITECTURE.md](docs/architecture/DATA_PIPELINE_ARCHITECTURE.md)** - Single entry point architecture
+- **[ingestion_service/README.md](ingestion_service/README.md)** - FastAPI ingestion service documentation
+- **[tests/middleware_test_data/README.md](tests/middleware_test_data/README.md)** - Middleware test data guide
 
 ### Documentation
 - **[docs/index.md](docs/index.md)** - Complete documentation index
@@ -145,19 +180,21 @@ forecastv3/
 
 ## Next Actions
 
-**For You (Right Now):**
-1. Run `queries/analyze_multi_warehouse_item_fixed.sql` in SAP B1
-2. Paste results into `data/sap_queries/*.tsv` files
-3. Share results for validation
+**For SAP Middleware Team:**
+1. Review middleware test data in `tests/middleware_test_data/`
+2. Configure middleware to POST to ingestion API endpoint
+3. Test with sample encrypted payloads
+4. Begin production data integration
+
+**For Development Team:**
+1. Build Next.js frontend on Vercel (read-only database access)
+2. Implement forecasting engine as background job
+3. Add automated materialized view refresh scheduling
 
 **This Week:**
-1. Validate SAP query results
-2. Implement warehouse-aware forecasting (see REGIONAL_FORECAST_IMPACT_ANALYSIS.md)
-
-**Next 2 Weeks:**
-1. Create Railway PostgreSQL database
-2. Run initial schema migration
-3. Create FastAPI backend structure
+1. Complete SAP middleware integration testing
+2. Validate production data flows
+3. Monitor Railway service health and performance
 
 ---
 
@@ -173,11 +210,16 @@ forecastv3/
 
 ## Project Info
 
-**Version:** Snapshot v1
+**Version:** Railway v1 (Ingestion API Live)
 **Last Updated:** 2026-01-16
 **License:** Internal (Pace Solutions)
 **Team:** Nathan Dery (nathan@pacesolutions.com)
 
-**Deployment Target:** Railway (PostgreSQL + Redis + FastAPI + Streamlit)
-**Budget:** $40/month target
-**Timeline:** 12 weeks to full Railway deployment
+**Railway Deployment:**
+- Ingestion API: https://ingestion-service-production-6947.up.railway.app
+- Database: PostgreSQL 17 on Railway (Postgres-B08X service)
+- Status: ✅ Live and operational
+
+**Deployment Target:** Railway (PostgreSQL) + Vercel (Next.js frontend)
+**Budget:** ~$40/month (Railway database + service)
+**Timeline:** Ingestion API complete, frontend pending

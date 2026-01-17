@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
 from typing import List, Dict, Any
 import logging
+import re
 
 from app.config import get_settings
 
@@ -54,6 +55,30 @@ TABLE_MAPPING = {
 }
 
 
+def extract_column_names(conflict_key_list: List[str]) -> List[str]:
+    """
+    Extract actual column names from conflict key list.
+    Handles SQL expressions like 'COALESCE(region, '')' -> 'region'
+    """
+    column_names = []
+    for key in conflict_key_list:
+        # If it's a simple column name (no parentheses), use it as-is
+        if '(' not in key:
+            column_names.append(key)
+        else:
+            # Extract column name from SQL function calls
+            # COALESCE(region, '') -> region
+            match = re.search(r'COALESCE\((\w+)', key)
+            if match:
+                column_names.append(match.group(1))
+            else:
+                # Fallback: try to extract first word inside parentheses
+                match = re.search(r'\((\w+)', key)
+                if match:
+                    column_names.append(match.group(1))
+    return column_names
+
+
 def insert_records(data_type: str, records: List[Dict[str, Any]]) -> int:
     """
     Insert records into the database.
@@ -77,20 +102,17 @@ def insert_records(data_type: str, records: List[Dict[str, Any]]) -> int:
     if not records:
         return 0
 
-    # Build INSERT query with ON CONFLICT handling
-    first_record = records[0]
-    columns = list(first_record.keys())
-
     # For each data type, define the conflict key (unique constraint)
+    # Note: For order tables, use business keys for UPSERT (no order tracking needed)
     conflict_keys = {
         "items": "item_code",
         "vendors": "vendor_code",
         "warehouses": "warehouse_code",
         "inventory_current": ["item_code", "warehouse_code"],
-        "sales_orders": "order_id",
-        "purchase_orders": "order_id",
-        "costs": ["item_code", "effective_date", "vendor_code"],
-        "pricing": ["item_code", "price_level", "region"],
+        "sales_orders": ["item_code", "posting_date", "warehouse_code", "COALESCE(customer_code, '')"],
+        "purchase_orders": ["item_code", "po_date", "warehouse_code", "vendor_code"],
+        "costs": ["item_code", "effective_date", "COALESCE(vendor_code, '')"],
+        "pricing": ["item_code", "price_level", "COALESCE(region, '')", "effective_date"],
     }
 
     conflict_key = conflict_keys.get(data_type, "id")
@@ -104,24 +126,28 @@ def insert_records(data_type: str, records: List[Dict[str, Any]]) -> int:
 
             for record in records:
                 # Build INSERT ... ON CONFLICT ... DO UPDATE query
-                # Use named parameters for each column
-                param_dict = {}
-                for i, (col, val) in enumerate(record.items()):
-                    param_dict[col] = val
+                # Filter out None values to handle optional fields (order tracking columns)
+                param_dict = {col: val for col, val in record.items() if val is not None}
+                columns_filtered = list(param_dict.keys())
 
-                column_names = ", ".join(columns)
-                value_placeholders = ", ".join([f":{col}" for col in columns])
-                update_placeholders = ", ".join([
-                    f"{col} = EXCLUDED.{col}"
-                    for col in columns
-                    if col not in ([conflict_key] if isinstance(conflict_key, str) else conflict_key)
-                ])
+                column_names = ", ".join(columns_filtered)
+                value_placeholders = ", ".join([f":{col}" for col in columns_filtered])
 
                 # Handle composite conflict keys
                 if isinstance(conflict_key, list):
                     conflict_target = ", ".join(conflict_key)
+                    # Extract actual column names for UPDATE exclusion
+                    exclude_columns = extract_column_names(conflict_key)
                 else:
                     conflict_target = conflict_key
+                    exclude_columns = [conflict_key]
+
+                # Build UPDATE placeholders (exclude conflict key columns)
+                update_placeholders = ", ".join([
+                    f"{col} = EXCLUDED.{col}"
+                    for col in columns_filtered
+                    if col not in exclude_columns
+                ])
 
                 query = text(f"""
                     INSERT INTO {table_name} ({column_names})

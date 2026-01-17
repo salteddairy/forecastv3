@@ -481,12 +481,150 @@ def process_data(data: pd.DataFrame) -> pd.DataFrame:
 
 ## Maintenance Rules
 
+### Documentation Update Policy (CRITICAL)
+
+**Due to Claude Code crashing, documentation MUST be updated FREQUENTLY to maintain continuity.**
+
+#### Update After EVERY Task Completion
+
+**When to Update:**
+- ✅ After completing ANY feature or fix
+- ✅ After ANY deployment to Railway
+- ✅ After ANY testing (successful or failed)
+- ✅ After ANY error resolution
+- ✅ After ANY architectural decision
+- ✅ EVERY 30 minutes during long sessions
+
+**What to Update (in order of priority):**
+
+1. **SR&ED Log** (`docs/archive/SRED_PROJECT_LOG.md`)
+   - Add phase entry for ANY new development work
+   - Include: Date, Time spent, Technical challenges, Files created/modified
+   - Format: Copy existing phase structure
+   - DO NOT wait until end of session
+
+2. **Project Status** (`docs/README.md` - Recent Achievements section)
+   - Add entry with today's date
+   - List all completed tasks
+   - Be specific about what was done
+   - Example format:
+   ```markdown
+   ### 2026-01-16 - Railway Deployment Complete
+   - ✅ FastAPI ingestion service deployed to Railway
+   - ✅ PostgreSQL 17 database schema applied
+   - ✅ End-to-end test successful
+   ```
+
+3. **Quick Status** (`STATUS.md` - see below)
+   - Update current work section
+   - Update completed tasks
+   - Update blockers
+   - This is the FIRST file to read after crash recovery
+
+4. **Project Rules** (this file)
+   - Update any new rules discovered
+   - Document new patterns or anti-patterns
+
+#### Crash Recovery Protocol
+
+**If Claude Code crashes:**
+
+1. **Read immediately (in order):**
+   - `STATUS.md` - What was I working on?
+   - `docs/README.md` - Recent achievements section
+   - `docs/archive/SRED_PROJECT_LOG.md` - Latest phase entries
+
+2. **Resume work:**
+   - Start with last incomplete task from STATUS.md
+   - Update STATUS.md with "Resuming at [timestamp]"
+   - Continue as if no crash occurred
+
+3. **After recovery:**
+   - Update STATUS.md: "Session resumed successfully"
+   - Add note to SR&ED log if significant time lost
+
+#### Documentation Templates
+
+**STATUS.md Template** (create this if it doesn't exist):
+```markdown
+# Project Status
+
+**Last Updated:** 2026-01-16 20:00
+**Session Start:** 2026-01-16 15:00
+
+---
+
+## Current Work
+
+### Active Task
+**Task:** [Brief description]
+**Started:** 2026-01-16 19:30
+**Status:** In Progress
+**Details:**
+- What I'm doing now
+- What's blocking me (if anything)
+- Next immediate step
+
+---
+
+## Completed This Session
+
+1. ✅ [Task 1] - Brief description
+2. ✅ [Task 2] - Brief description
+3. ✅ [Task 3] - Brief description
+
+---
+
+## Next Steps (Priority Order)
+
+1. [ ] [Next task] - Brief description
+2. [ ] [Following task] - Brief description
+3. [ ] [Future task] - Brief description
+
+---
+
+## Blocked Issues
+
+- **Issue:** [Description]
+  - **Impact:** High/Medium/Low
+  - **Waiting on:** [What/Who]
+
+---
+
+## Railway Status
+
+| Service | URL | Status |
+|---------|-----|--------|
+| Ingestion API | https://ingestion-service-production-6947.up.railway.app/api/ingest | ✅ Healthy |
+| Database | Postgres-B08X on Railway | ✅ Connected |
+
+---
+
+## Recent Deployments
+
+| Date | Component | Status |
+|------|-----------|--------|
+| 2026-01-16 | FastAPI Ingestion Service | ✅ Live |
+| 2026-01-16 | PostgreSQL Schema | ✅ Applied |
+
+---
+
+## Session Notes
+
+- **Crashes this session:** 0
+- **Time lost to crashes:** 0 minutes
+- **Workaround:** None needed
+```
+
+---
+
 ### Weekly Tasks
 
 1. **Clean up root directory** - Move any stray files
 2. **Archive old docs** - Move documents >6 months old to archive
 3. **Rotate logs** - Delete logs older than 30 days
 4. **Update PROJECT_STATUS** - Mark completed tasks
+5. **Review STATUS.md** - Ensure it's current and accurate
 
 ### Monthly Tasks
 
@@ -494,6 +632,7 @@ def process_data(data: pd.DataFrame) -> pd.DataFrame:
 2. **Clean up cache** - Delete old cache files
 3. **Update dependencies** - Check for security updates
 4. **Archive completed work** - Move finished phase docs to archive
+5. **SR&ED review** - Ensure all work logged for tax credits
 
 ### On Project Milestones
 
@@ -501,6 +640,7 @@ def process_data(data: pd.DataFrame) -> pd.DataFrame:
 2. **Update PROJECT_STATUS** - Mark milestone complete
 3. **Archive phase docs** - Move completed phase docs to archive
 4. **Update README** - Reflect current status
+5. **Update STATUS.md** - Mark milestone complete
 
 ---
 

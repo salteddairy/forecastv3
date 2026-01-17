@@ -106,25 +106,39 @@ class InventoryRecord(BaseModel):
 
 class SalesOrderRecord(BaseModel):
     """Sales order record."""
-    order_id: str = Field(..., max_length=50)
-    item_code: str = Field(..., max_length=50)
-    order_date: str  # ISO format date
-    quantity: float = Field(gt=0)
-    uom: str = Field(default="EA", max_length=10)
-    warehouse_code: str = Field(..., max_length=20)
+    order_number: Optional[str] = Field(None, max_length=50, description="Sales order number (ORDR.DocEntry) - Optional for forecasting")
+    line_number: Optional[int] = Field(None, description="Line number within the order - Optional for forecasting")
+    posting_date: str  # ISO format date
+    promise_date: Optional[str] = None  # ISO format date
     customer_code: Optional[str] = Field(None, max_length=50)
-    region: Optional[str] = Field(None, max_length=100)
+    customer_name: Optional[str] = Field(None, max_length=500)
+    item_code: str = Field(..., max_length=50)
+    item_description: Optional[str] = Field(None, max_length=500)
+    ordered_qty: float = Field(gt=0)
+    shipped_qty: float = Field(default=0)
+    row_value: Optional[float] = None
+    warehouse_code: Optional[str] = Field(None, max_length=20)
+    document_type: Optional[str] = Field(None, max_length=20)
 
 
 class PurchaseOrderRecord(BaseModel):
     """Purchase order record."""
-    order_id: str = Field(..., max_length=50)
-    item_code: str = Field(..., max_length=50)
-    order_date: str  # ISO format date
-    quantity: float = Field(gt=0)
-    uom: str = Field(default="EA", max_length=10)
+    po_number: Optional[str] = Field(None, max_length=50, description="Purchase order number (OPOR.DocEntry) - Optional for forecasting")
+    line_number: Optional[int] = Field(None, description="Line number within the order - Optional for forecasting")
+    po_date: str  # ISO format date
+    event_date: Optional[str] = None  # ISO format date
     vendor_code: str = Field(..., max_length=50)
-    warehouse_code: str = Field(..., max_length=20)
+    vendor_name: Optional[str] = Field(None, max_length=500)
+    item_code: str = Field(..., max_length=50)
+    ordered_qty: float = Field(gt=0)
+    received_qty: float = Field(default=0)
+    row_value: Optional[float] = None
+    currency: str = Field(default="CAD", max_length=3)
+    exchange_rate: float = Field(default=1.0)
+    warehouse_code: Optional[str] = Field(None, max_length=20)
+    freight_terms: Optional[str] = Field(None, max_length=20)
+    fob: Optional[str] = Field(None, max_length=20)
+    lead_time_days: Optional[int] = None
 
 
 class CostRecord(BaseModel):
@@ -142,11 +156,13 @@ class CostRecord(BaseModel):
 class PricingRecord(BaseModel):
     """Pricing data record."""
     item_code: str = Field(..., max_length=50)
-    price_level: str = Field(..., max_length=50)
-    region: Optional[str] = Field(None, max_length=100)
+    price_level: str = Field(..., max_length=20)
+    region: Optional[str] = Field(None, max_length=50)
     unit_price: float = Field(gt=0)
-    currency: str = Field(default="USD", max_length=10)
+    currency: str = Field(default="CAD", max_length=3)
     effective_date: str  # ISO format date
+    expiry_date: Optional[str] = None  # ISO format date
+    price_source: Optional[str] = Field(None, max_length=50)
     is_active: bool = True
 
 

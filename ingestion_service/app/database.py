@@ -103,16 +103,16 @@ def insert_records(data_type: str, records: List[Dict[str, Any]]) -> int:
         return 0
 
     # For each data type, define the conflict key (unique constraint)
-    # Note: For order tables, use business keys for UPSERT (no order tracking needed)
+    # Note: Railway simplified schema uses (order_number, order_line_id) as primary key
     conflict_keys = {
         "items": "item_code",
         "vendors": "vendor_code",
         "warehouses": "warehouse_code",
         "inventory_current": ["item_code", "warehouse_code"],
-        "sales_orders": ["item_code", "posting_date", "warehouse_code", "COALESCE(customer_code, '')"],
-        "purchase_orders": ["item_code", "po_date", "warehouse_code", "vendor_code"],
-        "costs": ["item_code", "effective_date", "COALESCE(vendor_code, '')"],
-        "pricing": ["item_code", "price_level", "COALESCE(region, '')", "effective_date"],
+        "sales_orders": ["order_number", "order_line_id"],  # Railway schema primary key
+        "purchase_orders": ["order_number", "order_line_id"],  # Railway schema primary key
+        "costs": ["item_code", "effective_date", "vendor_code"],
+        "pricing": ["item_code", "price_level", "region_key", "effective_date"],
     }
 
     conflict_key = conflict_keys.get(data_type, "id")
@@ -125,6 +125,19 @@ def insert_records(data_type: str, records: List[Dict[str, Any]]) -> int:
             inserted = 0
 
             for record in records:
+                # For order tables, auto-generate order_number and order_line_id if not provided
+                # (Railway schema requires these fields as NOT NULL)
+                if data_type == "sales_orders":
+                    if record.get("order_number") is None:
+                        record["order_number"] = f"AUTO_{record['item_code']}_{record['order_date']}"
+                    if record.get("order_line_id") is None:
+                        record["order_line_id"] = 1  # Default to line 1 for auto-generated orders
+                elif data_type == "purchase_orders":
+                    if record.get("order_number") is None:
+                        record["order_number"] = f"AUTO_PO_{record['item_code']}_{record['order_date']}"
+                    if record.get("order_line_id") is None:
+                        record["order_line_id"] = 1  # Default to line 1 for auto-generated orders
+
                 # Build INSERT ... ON CONFLICT ... DO UPDATE query
                 # Filter out None values to handle optional fields (order tracking columns)
                 param_dict = {col: val for col, val in record.items() if val is not None}

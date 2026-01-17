@@ -189,86 +189,53 @@ def generate_inventory_data():
 
 
 def generate_sales_orders_data():
-    """Generate sample sales orders."""
+    """Generate sample sales orders - matches Railway simplified schema."""
     base_date = datetime.now() - timedelta(days=30)
     return [
         {
-            "posting_date": (base_date + timedelta(days=1)).strftime('%Y-%m-%d'),
-            "promise_date": (base_date + timedelta(days=8)).strftime('%Y-%m-%d'),
-            "customer_code": "CUST001",
-            "customer_name": "ABC Corporation",
+            "order_date": (base_date + timedelta(days=1)).strftime('%Y-%m-%d'),
             "item_code": "ITEM001",
-            "item_description": "Industrial Widget A - Premium Grade",
-            "ordered_qty": 100.0,
-            "shipped_qty": 100.0,
-            "row_value": 4500.00,
+            "quantity": 100.0,
             "warehouse_code": "WH01",
-            "document_type": "Document_Item"
+            "customer_code": "CUST001",
+            "region": "NORTH_AMERICA"
         },
         {
-            "posting_date": (base_date + timedelta(days=5)).strftime('%Y-%m-%d'),
-            "promise_date": (base_date + timedelta(days=12)).strftime('%Y-%m-%d'),
-            "customer_code": "CUST002",
-            "customer_name": "XYZ Industries Ltd",
+            "order_date": (base_date + timedelta(days=5)).strftime('%Y-%m-%d'),
             "item_code": "ITEM002",
-            "item_description": "Hydraulic Piston Assembly - 50mm",
-            "ordered_qty": 50.0,
-            "shipped_qty": 25.0,
-            "row_value": 13750.00,
+            "quantity": 50.0,
             "warehouse_code": "WH01",
-            "document_type": "Document_Item"
+            "customer_code": "CUST002",
+            "region": "NORTH_AMERICA"
         },
         {
-            "posting_date": (base_date + timedelta(days=15)).strftime('%Y-%m-%d'),
-            "promise_date": (base_date + timedelta(days=22)).strftime('%Y-%m-%d'),
-            "customer_code": "CUST001",
-            "customer_name": "ABC Corporation",
+            "order_date": (base_date + timedelta(days=15)).strftime('%Y-%m-%d'),
             "item_code": "ITEM001",
-            "item_description": "Industrial Widget A - Premium Grade",
-            "ordered_qty": 200.0,
-            "shipped_qty": 0.0,
-            "row_value": 9000.00,
+            "quantity": 200.0,
             "warehouse_code": "WH02",
-            "document_type": "Document_Item"
+            "customer_code": "CUST001",
+            "region": "EUROPE"
         }
     ]
 
 
 def generate_purchase_orders_data():
-    """Generate sample purchase orders."""
+    """Generate sample purchase orders - matches Railway simplified schema."""
     base_date = datetime.now() - timedelta(days=45)
     return [
         {
-            "po_date": (base_date + timedelta(days=2)).strftime('%Y-%m-%d'),
-            "event_date": (base_date + timedelta(days=16)).strftime('%Y-%m-%d'),
+            "order_date": (base_date + timedelta(days=2)).strftime('%Y-%m-%d'),
             "vendor_code": "VENDOR001",
-            "vendor_name": "Acme Industrial Supplies Inc.",
             "item_code": "ITEM001",
-            "ordered_qty": 500.0,
-            "received_qty": 500.0,
-            "row_value": 14475.00,
-            "currency": "CAD",
-            "exchange_rate": 1.0,
-            "warehouse_code": "WH01",
-            "freight_terms": "FOB",
-            "fob": "Origin",
-            "lead_time_days": 14
+            "quantity": 500.0,
+            "warehouse_code": "WH01"
         },
         {
-            "po_date": (base_date + timedelta(days=10)).strftime('%Y-%m-%d'),
-            "event_date": None,
+            "order_date": (base_date + timedelta(days=10)).strftime('%Y-%m-%d'),
             "vendor_code": "VENDOR002",
-            "vendor_name": "Global Parts Manufacturing LLC",
             "item_code": "ITEM002",
-            "ordered_qty": 50.0,
-            "received_qty": 0.0,
-            "row_value": 7875.00,
-            "currency": "CAD",
-            "exchange_rate": 1.0,
-            "warehouse_code": "WH01",
-            "freight_terms": "Prepaid",
-            "fob": "Destination",
-            "lead_time_days": 21
+            "quantity": 50.0,
+            "warehouse_code": "WH01"
         }
     ]
 

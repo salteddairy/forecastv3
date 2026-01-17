@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """Create remaining views."""
 import sys
+import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from sqlalchemy import create_engine, text
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-database_url = "postgresql://postgres:bESEdDxzAMlfHmtFjrGMQcIESsBlbQrk@yamanote.proxy.rlwy.net:16099/railway"
-engine = create_engine(database_url)
+# Get Railway PostgreSQL connection string from environment variable
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    print("Error: DATABASE_URL environment variable not set")
+    print("Set it using: export DATABASE_URL='postgresql://user:password@host:port/database'")
+    print("Or get it from Railway CLI: railway domain --json")
+    sys.exit(1)
+
+engine = create_engine(DATABASE_URL)
 
 with engine.connect() as conn:
     # mv_vendor_lead_times (fixed)

@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
 Apply migration 003 to Railway PostgreSQL database.
-Uses direct connection string.
+Uses DATABASE_URL environment variable or Railway CLI connection.
 """
 import sys
+import os
 from pathlib import Path
 
-# Railway PostgreSQL connection string (public proxy)
-DATABASE_URL = "postgresql://postgres:pbskRqDZGjvRvLgOaHtYxXUvJHwVxgCJyWiYrBjBdKfUvFpBwH@yamanote.proxy.rlwy.net:16099/railway"
+# Railway PostgreSQL connection string from environment variable
+# Set via: export DATABASE_URL="postgresql://user:pass@host:port/database"
+# Or use Railway CLI to get connection string
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    print("Error: DATABASE_URL environment variable not set")
+    print("Set it using: export DATABASE_URL='postgresql://user:password@host:port/database'")
+    print("Or get it from Railway CLI: railway domain --json")
+    sys.exit(1)
 
 try:
     import psycopg2

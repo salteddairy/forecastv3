@@ -1,0 +1,26 @@
+# Forecasting Engine Requirements
+# Railway Worker Deployment
+
+# Core dependencies
+pandas>=2.3.0
+numpy>=2.0.0
+
+# Database
+sqlalchemy>=2.0.25
+psycopg2-binary>=2.9.9
+
+# Forecasting models
+prophet>=1.1.5
+statsmodels>=0.14.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+
+# Parallel processing
+joblib>=1.3.0
+
+# Configuration
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
+
+# Utilities
+python-dateutil>=2.8.0

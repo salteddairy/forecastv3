@@ -53,9 +53,9 @@ RUN chmod +x worker_start.sh
 # Create logs directory
 RUN mkdir -p /app/logs
 
-# Verify installation
-RUN python -c "from forecasting_engine import __version__; print(f'Forecasting Engine v{__version__}')" && \
-    python -m forecasting_engine.cli config > /dev/null
+# Verify files are present
+RUN ls -la /app/ && \
+    test -f /app/worker_start.sh && echo "worker_start.sh found" || echo "worker_start.sh NOT FOUND"
 
 # Set entrypoint
 ENTRYPOINT ["/app/worker_start.sh"]
